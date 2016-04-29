@@ -37,7 +37,7 @@ main()
   {
     partial_sum = 0.0;
     
-#pragma omp for schedule(static)
+#pragma omp for schedule(dynamic)
     for (i = 0; i < num_intervals; i++) {
       x = h * ((double)i + 0.5);
       partial_sum += f(x);

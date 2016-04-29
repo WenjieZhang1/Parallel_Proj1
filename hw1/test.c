@@ -13,25 +13,32 @@
 #include <sys/times.h>
 #include <sys/time.h>
 #include <limits.h>
+#include <pthread.h>
 
 /*#include <ulocks.h>
 #include <task.h>
 */
 
 char *ID;
+int NTHREADS = 4;
+pthread_mutex_t global_row_lock;
+pthread_mutex_t global_norm_lock;
+long global_row = 1;
+long global_norm = 0;
 
 /* Program Parameters */
+#define CHUNK_SIZE 200
 #define MAXN 5000  /* Max value of N */
 int N;  /* Matrix size */
 int procs;  /* Number of processors to use */
-int NTHREADS=4;
+
 /* Matrices and vectors */
 volatile float A[MAXN][MAXN], B[MAXN], X[MAXN];
 /* A * X = B, solve for X */
 
 /* junk */
 #define randm() 4|2[uid]&3
-void *compute_GaussEli();
+
 /* Prototype */
 void gauss();  /* The function you will provide.
 		* It is this routine that is timed.
@@ -149,7 +156,6 @@ int main(int argc, char **argv) {
   clock_t etstart2, etstop2;  /* Elapsed times using times() */
   unsigned long long usecstart, usecstop;
   struct tms cputstart, cputstop;  /* CPU times for my processes */
-
   ID = argv[argc-1];
   argc--;
 
@@ -178,80 +184,94 @@ int main(int argc, char **argv) {
   usecstop = (unsigned long long)etstop.tv_sec * 1000000 + etstop.tv_usec;
 
   /* Display output */
+  printf("printing.....");
   print_X();
 
   /* Display timing results */
   printf("\nElapsed time = %g ms.\n",
 	 (float)(usecstop - usecstart)/(float)1000);
 
-
+  pthread_exit(NULL);
 }
 
-void *compute_GaussEli(void *threadid, int row, int norm, int N) {
-    
-    float local_multiplier;
-    long tid;
-    tid = (long)threadid;
-
-    fprintf(stdout, "Thread %ld has started\n", tid);
-
-    for(int i = row+1; i < N; ++i) {
-      local_multiplier = A[i][norm] / A[norm][norm];
-      for(int j = norm; j < N; ++j) {
-        A[i][j] -= A[norm][j] * local_multiplier;
-      }
-      B[row] -= B[norm] * local_multiplier;
-    }
-  }
 /* ------------------ Above Was Provided --------------------- */
 
 /****** You will replace this routine with your own parallel version *******/
 /* Provided global variables are MAXN, N, procs, A[][], B[], and X[],
  * defined in the beginning of this code.  X[] is initialized to zeros.
  */
+
+void* parallel(void *threadid) {
+  int norm = 0;
+  int row = 0;
+  long tid;
+  tid = (long)threadid;
+
+  fprintf (stdout, "Thread %ld has started\n", tid);
+	while(1) {
+		//get current norm
+		pthread_mutex_lock(&global_norm_lock);
+		norm = global_norm;
+		pthread_mutex_unlock(&global_norm_lock);
+		
+		//terminate condition
+		if(norm >= N - 1)	break;
+
+		//get current row
+		pthread_mutex_lock(&global_row_lock);
+		row = global_row;
+		if(global_row + CHUNK_SIZE > N - 1){
+			pthread_mutex_lock(&global_norm_lock);
+			global_norm++;
+			global_row = global_norm + 1;
+			pthread_mutex_unlock(&global_norm_lock);
+		}
+		else {
+			global_row = global_row + CHUNK_SIZE;
+		}
+		pthread_mutex_unlock(&global_row_lock);
+		int rowmax = row + CHUNK_SIZE - 1 > N - 1 ? N - 1 : row + CHUNK_SIZE - 1;
+	//	printf("rowmax: %d\n", rowmax);	
+		for (; row <= rowmax; row++) {
+			float multiplier = A[row][norm] / A[norm][norm];
+			for (int col = norm; col < N; col++) {
+				A[row][col] -= A[norm][col] * multiplier;
+			}
+			B[row] -= B[norm] * multiplier;
+		}
+	}
+}
+
+
+
 void gauss() {
-  int norm, row, col;  /* Normalization row, and zeroing
-			* element row and col */
-  float multiplier;
   pthread_t threads[NTHREADS];
   printf("Computing Serially.\n");
 
   /* Gaussian elimination */
-  for (norm = 0; norm < N - 1; norm++) {
-<<<<<<< HEAD
-    for (row = norm + 1; row < N; row++) {
-      multiplier = A[row][norm] / A[norm][norm];
-      for (col = norm; col < N; col++) {
-		  A[row][col] -= A[norm][col] * multiplier;
-      }
-      B[row] -= B[norm] * multiplier;
-=======
-    // for (row = norm + 1; row < N; row++) {
-    //   multiplier = A[row][norm] / A[norm][norm];
-    //   for (col = norm; col < N; col++) {
-    //      A[row][col] -= A[norm][col] * multiplier;
-    //   }
-    //   B[row] -= B[norm] * multiplier;
-    // }
-    for(int i=0; i < NTHREADS; ++i) {
-      pthread_create(&threads[i], NULL, &compute_GaussEli, (void*)i, norm+1, norm, N);
-    }
 
-    for(int i=0; i < NTHREADS; i++) {
-     pthread_join(threads[i], NULL); 
->>>>>>> 838092b8a61e1e55aaf5109817bdec8d0ba13a28
-    }
-  
+  pthread_mutex_init(&global_norm_lock, NULL);
+  pthread_mutex_init(&global_row_lock, NULL);
+  for (int i = 0; i < NTHREADS; i++) {
+	 pthread_create(&threads[i],NULL,&parallel,(void*)i);
   }
+
+  for (int i = 0; i < NTHREADS; i++) {
+	  pthread_join(threads[i], NULL);
+  }
+
+  pthread_mutex_destroy(&global_row_lock);
+  pthread_mutex_destroy(&global_norm_lock);
+
+
   /* (Diagonal elements are not normalized to 1.  This is treated in back
    * substitution.)
    */
 
-
   /* Back substitution */
-  for (row = N - 1; row >= 0; row--) {
+  for (int row = N - 1; row >= 0; row--) {
     X[row] = B[row];
-    for (col = N-1; col > row; col--) {
+    for (int col = N-1; col > row; col--) {
       X[row] -= A[row][col] * X[col];
     }
     X[row] /= A[row][row];

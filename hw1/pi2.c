@@ -25,7 +25,7 @@ double h;
 double sum;
 long global_i;
 pthread_mutex_t global_i_lock, sum_lock;
-int NTHREADS=4;
+int NTHREADS=1;
 void *compute_pi();
 
 double f( double a )
