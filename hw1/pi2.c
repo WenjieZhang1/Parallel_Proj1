@@ -38,7 +38,7 @@ void *compute_pi(void *threadid)
   long i, imax;
   double x, partial_sum;
   unsigned int tryout;
-  pthread_t self;
+  // pthread_t self;
   long tid;
   tid = (long)threadid;
 
@@ -72,7 +72,7 @@ void *compute_pi(void *threadid)
   pthread_mutex_unlock(&sum_lock);
 }
 
-main()
+int main()
 {
   double pi;
   int i=0; 
@@ -103,4 +103,5 @@ main()
   pthread_mutex_destroy(&global_i_lock);
   pthread_mutex_destroy(&sum_lock);
   pthread_exit(NULL);
+  return 0;
 }
