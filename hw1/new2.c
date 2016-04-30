@@ -26,7 +26,7 @@ char *ID;
 #define MAXN 2000  /* Max value of N */
 int N;  /* Matrix size */
 int procs;  /* Number of processors to use */
-int global_norm;
+
 
 /* Matrices and vectors */
 volatile float A[MAXN][MAXN], B[MAXN], X[MAXN];
@@ -197,6 +197,7 @@ int main(int argc, char **argv) {
  * defined in the beginning of this code.  X[] is initialized to zeros.
  */
 void gauss() {
+	int global_norm;
   int norm, row, col, i, j;  /* Normalization row, and zeroing
 			* element row and col */
   float multiplier;
@@ -216,10 +217,10 @@ void gauss() {
   /* (Diagonal elements are not normalized to 1.  This is treated in back
    * substitution.)
    */
-  #pragma omp parallel private(i, multiplier, norm,j) num_threads(4)
+  #pragma omp parallel private(i, multiplier, j) num_threads(4)
    {
     while (global_norm < N) {
-        norm = global_norm;
+    norm = global_norm;
     #pragma omp for schedule(dynamic)
       for(i = norm+1; i < N; ++i) {
         multiplier = A[i][norm] / A[norm][norm];
@@ -227,6 +228,7 @@ void gauss() {
           A[i][j] -= A[norm][j] * multiplier; 
         }
         B[i] -= B[norm] * multiplier;
+        
       }
     
     #pragma omp critical 
