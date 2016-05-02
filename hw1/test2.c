@@ -201,26 +201,21 @@ void gauss() {
 
   printf("Computing Serially.\n");
 
-  global_norm = 0;
+  norm=0;
   /* Gaussian elimination */
-#pragma omp parallel private(row, col, norm, multiplier) num_threads(4)
-  {
-	while(global_norm < N) {
-		//get current norm
-		norm = global_norm;
-#pragma omp for schedule(dynamic)
-		for (row = norm + 1; row < N; row++) {
-			multiplier = A[row][norm] / A[norm][norm];
-			for (col = norm; col < N; col++) {
-				A[row][col] -= A[norm][col] * multiplier;
-			}
-			B[row] -= B[norm] * multiplier;
-		}
-#pragma omp critical
-		{
-			if(row >= N)	global_norm++;
-		}
-	}
+while(norm < N-1) {
+  #pragma omp parallel private(row, col, multiplier) num_threads(procs)
+    {
+  #pragma omp for schedule(dynamic)
+  		for (row = norm + 1; row < N; row++) {
+  			multiplier = A[row][norm] / A[norm][norm];
+  			for (col = norm; col < N; col++) {
+  				A[row][col] -= A[norm][col] * multiplier;
+  			}
+  			B[row] -= B[norm] * multiplier;
+  		}
+  	}
+  norm++;
 
   }
   /* (Diagonal elements are not normalized to 1.  This is treated in back
